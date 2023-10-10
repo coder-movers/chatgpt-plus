@@ -7,8 +7,11 @@ import (
 	"chatplus/handler/admin"
 	logger2 "chatplus/logger"
 	"chatplus/service"
-	"chatplus/service/function"
+	"chatplus/service/fun"
+	"chatplus/service/mj"
 	"chatplus/service/oss"
+	"chatplus/service/sd"
+	"chatplus/service/wx"
 	"chatplus/store"
 	"context"
 	"embed"
@@ -107,7 +110,7 @@ func main() {
 		}),
 
 		// 创建函数
-		fx.Provide(function.NewFunctions),
+		fx.Provide(fun.NewFunctions),
 
 		// 创建控制器
 		fx.Provide(handler.NewChatRoleHandler),
@@ -119,6 +122,7 @@ func main() {
 		fx.Provide(handler.NewCaptchaHandler),
 		fx.Provide(handler.NewMidJourneyHandler),
 		fx.Provide(handler.NewChatModelHandler),
+		fx.Provide(handler.NewSdJobHandler),
 
 		fx.Provide(admin.NewConfigHandler),
 		fx.Provide(admin.NewAdminHandler),
@@ -135,13 +139,47 @@ func main() {
 			return service.NewCaptchaService(config.ApiConfig)
 		}),
 		fx.Provide(oss.NewUploaderManager),
-		fx.Provide(service.NewMjService),
-		fx.Invoke(func(mjService *service.MjService) {
-			go func() {
-				mjService.Run()
-			}()
+		fx.Provide(mj.NewService),
+
+		// 微信机器人服务
+		fx.Provide(wx.NewWeChatBot),
+		fx.Invoke(func(config *types.AppConfig, bot *wx.Bot) {
+			if config.WeChatBot {
+				err := bot.Run()
+				if err != nil {
+					logger.Error("微信登录失败：", err)
+				}
+			}
 		}),
 
+		// MidJourney 机器人
+		fx.Provide(mj.NewBot),
+		fx.Provide(mj.NewClient),
+		fx.Invoke(func(config *types.AppConfig, bot *mj.Bot) {
+			if config.MjConfig.Enabled {
+				err := bot.Run()
+				if err != nil {
+					log.Fatal("MidJourney 服务启动失败：", err)
+				}
+			}
+		}),
+		fx.Invoke(func(config *types.AppConfig, mjService *mj.Service) {
+			if config.MjConfig.Enabled {
+				go func() {
+					mjService.Run()
+				}()
+			}
+		}),
+
+		// Stable Diffusion 机器人
+		fx.Provide(sd.NewService),
+		fx.Invoke(func(config *types.AppConfig, service *sd.Service) {
+			if config.SdConfig.Enabled {
+				go func() {
+					service.Run()
+				}()
+			}
+		}),
 		// 注册路由
 		fx.Invoke(func(s *core.AppServer, h *handler.ChatRoleHandler) {
 			group := s.Engine.Group("/api/role/")
@@ -185,15 +223,19 @@ func main() {
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.RewardHandler) {
 			group := s.Engine.Group("/api/reward/")
-			group.POST("notify", h.Notify)
 			group.POST("verify", h.Verify)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.MidJourneyHandler) {
 			group := s.Engine.Group("/api/mj/")
-			group.POST("notify", h.Notify)
 			group.POST("image", h.Image)
 			group.POST("upscale", h.Upscale)
 			group.POST("variation", h.Variation)
+			group.GET("jobs", h.JobList)
+			group.Any("client", h.Client)
+		}),
+		fx.Invoke(func(s *core.AppServer, h *handler.SdJobHandler) {
+			group := s.Engine.Group("/api/sd")
+			group.POST("image", h.Image)
 			group.GET("jobs", h.JobList)
 			group.Any("client", h.Client)
 		}),

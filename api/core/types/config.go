@@ -16,10 +16,11 @@ type AppConfig struct {
 	Redis         RedisConfig       // redis 连接信息
 	ApiConfig     ChatPlusApiConfig // ChatPlus API authorization configs
 	AesEncryptKey string
-	SmsConfig     AliYunSmsConfig   // AliYun send message service config
-	ExtConfig     ChatPlusExtConfig // ChatPlus extensions callback api config
-
-	OSS OSSConfig // OSS config
+	SmsConfig     AliYunSmsConfig       // AliYun send message service config
+	OSS           OSSConfig             // OSS config
+	MjConfig      MidJourneyConfig      // mj 绘画配置
+	WeChatBot     bool                  // 是否启用微信机器人
+	SdConfig      StableDiffusionConfig // sd 绘画配置
 }
 
 type ChatPlusApiConfig struct {
@@ -28,9 +29,23 @@ type ChatPlusApiConfig struct {
 	Token  string
 }
 
-type ChatPlusExtConfig struct {
-	ApiURL string
-	Token  string
+type MidJourneyConfig struct {
+	Enabled   bool
+	UserToken string
+	BotToken  string
+	GuildId   string // Server ID
+	ChanelId  string // Chanel ID
+}
+
+type WeChatConfig struct {
+	Enabled bool
+}
+
+type StableDiffusionConfig struct {
+	Enabled         bool
+	ApiURL          string
+	ApiKey          string
+	Txt2ImgJsonPath string
 }
 
 type AliYunSmsConfig struct {
@@ -38,6 +53,8 @@ type AliYunSmsConfig struct {
 	AccessSecret string
 	Product      string
 	Domain       string
+	Sign         string // 短信签名
+	CodeTempId   string // 验证码短信模板 ID
 }
 
 type RedisConfig struct {
@@ -87,13 +104,14 @@ type ModelAPIConfig struct {
 }
 
 type SystemConfig struct {
-	Title             string   `json:"title"`
-	AdminTitle        string   `json:"admin_title"`
-	Models            []string `json:"models"`
-	UserInitCalls     int      `json:"user_init_calls"` // 新用户注册默认总送多少次调用
-	InitImgCalls      int      `json:"init_img_calls"`
-	VipMonthCalls     int      `json:"vip_month_calls"` // 会员每个赠送的调用次数
-	EnabledRegister   bool     `json:"enabled_register"`
-	EnabledMsgService bool     `json:"enabled_msg_service"`
-	EnabledDraw       bool     `json:"enabled_draw"` // 启动 AI 绘画功能
+	Title           string   `json:"title"`
+	AdminTitle      string   `json:"admin_title"`
+	Models          []string `json:"models"`
+	UserInitCalls   int      `json:"user_init_calls"` // 新用户注册默认总送多少次调用
+	InitImgCalls    int      `json:"init_img_calls"`
+	VipMonthCalls   int      `json:"vip_month_calls"` // 会员每个赠送的调用次数
+	EnabledRegister bool     `json:"enabled_register"`
+	EnabledMsg      bool     `json:"enabled_msg"`  // 启用短信验证码服务
+	EnabledDraw     bool     `json:"enabled_draw"` // 启动 AI 绘画功能
+	RewardImg       string   `json:"reward_img"`   // 众筹收款二维码地址
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	"github.com/qiniu/go-sdk/v7/storage"
+	"net/url"
 	"path/filepath"
 	"time"
 )
@@ -72,12 +73,22 @@ func (s QinNiuOss) PutFile(ctx *gin.Context, name string) (string, error) {
 	return fmt.Sprintf("%s/%s", s.config.Domain, ret.Key), nil
 }
 
-func (s QinNiuOss) PutImg(imageURL string) (string, error) {
-	imageData, err := utils.DownloadImage(imageURL, s.proxyURL)
+func (s QinNiuOss) PutImg(imageURL string, useProxy bool) (string, error) {
+	var imageData []byte
+	var err error
+	if useProxy {
+		imageData, err = utils.DownloadImage(imageURL, s.proxyURL)
+	} else {
+		imageData, err = utils.DownloadImage(imageURL, "")
+	}
 	if err != nil {
 		return "", fmt.Errorf("error with download image: %v", err)
 	}
-	fileExt := filepath.Ext(filepath.Base(imageURL))
+	parse, err := url.Parse(imageURL)
+	if err != nil {
+		return "", fmt.Errorf("error with parse image URL: %v", err)
+	}
+	fileExt := filepath.Ext(parse.Path)
 	key := fmt.Sprintf("%s/%d%s", s.dir, time.Now().UnixMicro(), fileExt)
 	ret := storage.PutRet{}
 	extra := storage.PutExtra{}

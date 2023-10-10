@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"net/url"
+	"os"
 )
 
 func main() {
-	parse, _ := url.Parse("http://localhost:5678/static")
-
-	imgURLPrefix := fmt.Sprintf("%s://%s", parse.Scheme, parse.Host)
-	fmt.Println(imgURLPrefix)
+	bytes, err := os.ReadFile("res/text2img.json")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(bytes))
 }

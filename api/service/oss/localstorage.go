@@ -5,6 +5,7 @@ import (
 	"chatplus/utils"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,14 +42,22 @@ func (s LocalStorage) PutFile(ctx *gin.Context, name string) (string, error) {
 	return utils.GenUploadUrl(s.config.BasePath, s.config.BaseURL, filePath), nil
 }
 
-func (s LocalStorage) PutImg(imageURL string) (string, error) {
-	filename := filepath.Base(imageURL)
+func (s LocalStorage) PutImg(imageURL string, useProxy bool) (string, error) {
+	parse, err := url.Parse(imageURL)
+	if err != nil {
+		return "", fmt.Errorf("error with parse image URL: %v", err)
+	}
+	filename := filepath.Base(parse.Path)
 	filePath, err := utils.GenUploadPath(s.config.BasePath, filename)
 	if err != nil {
 		return "", fmt.Errorf("error with generate image dir: %v", err)
 	}
 
-	err = utils.DownloadFile(imageURL, filePath, s.proxyURL)
+	if useProxy {
+		err = utils.DownloadFile(imageURL, filePath, s.proxyURL)
+	} else {
+		err = utils.DownloadFile(imageURL, filePath, "")
+	}
 	if err != nil {
 		return "", fmt.Errorf("error with download image: %v", err)
 	}
