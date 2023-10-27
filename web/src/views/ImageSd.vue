@@ -289,58 +289,40 @@
         <div class="task-list-inner" :style="{ height: listBoxHeight + 'px' }">
           <h2>任务列表</h2>
           <div class="running-job-list">
-            <ItemList :items="runningJobs" v-if="runningJobs.length > 0">
+            <ItemList :items="runningJobs" v-if="runningJobs.length > 0" width="240">
               <template #default="scope">
                 <div class="job-item">
-                  <el-popover
-                      placement="top-start"
-                      title="绘画提示词"
-                      :width="240"
-                      trigger="hover"
-                  >
-                    <template #reference>
-                      <div v-if="scope.item.progress > 0" class="job-item-inner">
-                        <el-image :src="scope.item['img_url']"
-                                  fit="cover"
-                                  loading="lazy">
-                          <template #placeholder>
-                            <div class="image-slot">
-                              正在加载图片
-                            </div>
-                          </template>
-
-                          <template #error>
-                            <div class="image-slot">
-                              <el-icon v-if="scope.item['img_url'] !== ''">
-                                <Picture/>
-                              </el-icon>
-                            </div>
-                          </template>
-                        </el-image>
-
-                        <div class="progress">
-                          <el-progress type="circle" :percentage="scope.item.progress" :width="100" color="#47fff1"/>
+                  <div v-if="scope.item.progress > 0" class="job-item-inner">
+                    <el-image :src="scope.item['img_url']"
+                              fit="cover"
+                              loading="lazy">
+                      <template #placeholder>
+                        <div class="image-slot">
+                          正在加载图片
                         </div>
-                      </div>
-                      <el-image fit="cover" v-else>
-                        <template #error>
-                          <div class="image-slot">
-                            <i class="iconfont icon-quick-start"></i>
-                            <span>任务正在排队中</span>
-                          </div>
-                        </template>
-                      </el-image>
-                    </template>
+                      </template>
 
-                    <template #default>
-                      <div class="mj-list-item-prompt">
-                        <span>{{ scope.item.prompt }}</span>
-                        <el-icon class="copy-prompt" :data-clipboard-text="scope.item.prompt">
-                          <DocumentCopy/>
-                        </el-icon>
+                      <template #error>
+                        <div class="image-slot">
+                          <el-icon v-if="scope.item['img_url'] !== ''">
+                            <Picture/>
+                          </el-icon>
+                        </div>
+                      </template>
+                    </el-image>
+
+                    <div class="progress">
+                      <el-progress type="circle" :percentage="scope.item.progress" :width="100" color="#47fff1"/>
+                    </div>
+                  </div>
+                  <el-image fit="cover" v-else>
+                    <template #error>
+                      <div class="image-slot">
+                        <i class="iconfont icon-quick-start"></i>
+                        <span>任务正在排队中</span>
                       </div>
                     </template>
-                  </el-popover>
+                  </el-image>
                 </div>
               </template>
             </ItemList>
@@ -348,9 +330,9 @@
           </div>
           <h2>创作记录</h2>
           <div class="finish-job-list">
-            <ItemList :items="finishedJobs" v-if="finishedJobs.length > 0">
+            <ItemList :items="finishedJobs" v-if="finishedJobs.length > 0" width="240" :gap="16">
               <template #default="scope">
-                <div class="job-item" @click="showTask(scope.item)">
+                <div class="job-item animate" @click="showTask(scope.item)">
                   <el-image
                       :src="scope.item['img_url']+'?imageView2/1/w/240/h/240/q/75'"
                       fit="cover"
@@ -372,6 +354,7 @@
                 </div>
               </template>
             </ItemList>
+            <el-empty :image-size="100" v-else/>
           </div> <!-- end finish job list-->
         </div>
 
@@ -539,6 +522,11 @@ const runningJobs = ref([])
 const finishedJobs = ref([])
 const previewImgList = ref([])
 const router = useRouter()
+// 检查是否有画同款的参数
+const _params = router.currentRoute.value.params["copyParams"]
+if (_params) {
+  params.value = JSON.parse(_params)
+}
 
 const socket = ref(null)
 const imgCalls = ref(0)
@@ -614,14 +602,14 @@ onMounted(() => {
   checkSession().then(user => {
     imgCalls.value = user['img_calls']
     // 获取运行中的任务
-    httpGet("/api/sd/jobs?status=0").then(res => {
+    httpGet(`/api/sd/jobs?status=0&user_id=${user['id']}`).then(res => {
       runningJobs.value = res.data
     }).catch(e => {
       ElMessage.error("获取任务失败：" + e.message)
     })
 
     // 获取运行中的任务
-    httpGet("/api/sd/jobs?status=1").then(res => {
+    httpGet(`/api/sd/jobs?status=1&user_id=${user['id']}`).then(res => {
       finishedJobs.value = res.data
       previewImgList.value = []
       for (let index in finishedJobs.value) {
@@ -639,7 +627,7 @@ onMounted(() => {
 
   const clipboard = new Clipboard('.copy-prompt');
   clipboard.on('success', () => {
-    ElMessage.success({message: "复制成功！", duration: 500});
+    ElMessage.success("复制成功！");
   })
 
   clipboard.on('error', () => {
@@ -681,4 +669,5 @@ const copyParams = (row) => {
 
 <style lang="stylus">
 @import "@/assets/css/image-sd.styl"
+@import "@/assets/css/custom-scroll.styl"
 </style>

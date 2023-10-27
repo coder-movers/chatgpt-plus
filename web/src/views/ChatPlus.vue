@@ -22,7 +22,8 @@
                    @click="changeChat(chat)">
                 <el-image :src="chat.icon" class="avatar"/>
                 <span class="chat-title-input" v-if="chat.edit">
-              <el-input v-model="tmpChatTitle" size="small" placeholder="请输入会话标题"/>
+              <el-input v-model="tmpChatTitle" size="small" @keydown="titleKeydown($event, chat)"
+                        placeholder="请输入会话标题"/>
             </span>
                 <span v-else class="chat-title">{{ chat.title }}</span>
                 <span class="btn btn-check" v-if="chat.edit || chat.removing">
@@ -66,14 +67,14 @@
                   <span>绑定手机号</span>
                 </el-dropdown-item>
 
-                <el-dropdown-item @click="showRewardDialog = true">
+                <el-dropdown-item @click="showRewardDialog = true" v-if="enableReward">
                   <el-icon>
                     <Present/>
                   </el-icon>
                   <span>加入众筹</span>
                 </el-dropdown-item>
 
-                <el-dropdown-item @click="showRewardVerifyDialog = true">
+                <el-dropdown-item @click="showRewardVerifyDialog = true" v-if="enableReward">
                   <el-icon>
                     <Checked/>
                   </el-icon>
@@ -242,7 +243,7 @@
         </div>
       </el-alert>
       <div style="text-align: center;padding-top: 10px;">
-        <el-image :src="rewardImg"/>
+        <el-image v-if="enableReward" :src="rewardImg"/>
       </div>
     </el-dialog>
   </div>
@@ -286,6 +287,7 @@ import Welcome from "@/components/Welcome.vue";
 import ChatMidJourney from "@/components/ChatMidJourney.vue";
 
 const title = ref('ChatGPT-智能助手');
+const enableReward = ref(false) // 是否启用众筹功能
 const rewardImg = ref('/images/reward.png')
 const models = ref([])
 const modelID = ref(0)
@@ -359,6 +361,7 @@ onMounted(() => {
     httpGet("/api/admin/config/get?key=system").then(res => {
       title.value = res.data.title
       rewardImg.value = res.data.reward_img
+      enableReward.value = res.data.enabled_reward
     }).catch(e => {
       ElMessage.error("获取系统配置失败：" + e.message)
     })
@@ -451,16 +454,24 @@ const editChatTitle = function (event, chat) {
   tmpChatTitle.value = chat.title;
 };
 
+
+const titleKeydown = (e, chat) => {
+  if (e.keyCode === 13) {
+    e.stopPropagation();
+    confirm(e, chat)
+  }
+}
 // 确认修改
 const confirm = function (event, chat) {
   event.stopPropagation();
   if (curOpt.value === 'edit') {
     if (tmpChatTitle.value === '') {
-      ElMessage.error("请输入会话标题！");
-      return;
+      return ElMessage.error("请输入会话标题！");
     }
-
-    httpPost('/api/chat/update', {id: chat.id, title: tmpChatTitle.value}).then(() => {
+    if (!chat.chat_id) {
+      return ElMessage.error("对话 ID 为空，请刷新页面再试！");
+    }
+    httpPost('/api/chat/update', {chat_id: chat.chat_id, title: tmpChatTitle.value}).then(() => {
       chat.title = tmpChatTitle.value;
       chat.edit = false;
     }).catch(e => {
@@ -544,7 +555,7 @@ const connect = function (chat_id, role_id) {
         content: _role['hello_msg'],
         orgContent: _role['hello_msg'],
       })
-      ElMessage.success({message: "对话连接成功！", duration: 500})
+      ElMessage.success({message: "对话连接成功！", duration: 1000})
     } else { // 加载聊天记录
       loadChatHistory(chat_id);
     }

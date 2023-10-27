@@ -1,9 +1,11 @@
-package handler
+package chatimpl
 
 import (
 	"bytes"
 	"chatplus/core"
 	"chatplus/core/types"
+	"chatplus/handler"
+	logger2 "chatplus/logger"
 	"chatplus/service/mj"
 	"chatplus/store"
 	"chatplus/store/model"
@@ -26,8 +28,10 @@ import (
 
 const ErrorMsg = "抱歉，AI 助手开小差了，请稍后再试。"
 
+var logger = logger2.GetLogger()
+
 type ChatHandler struct {
-	BaseHandler
+	handler.BaseHandler
 	db        *gorm.DB
 	leveldb   *store.LevelDB
 	redis     *redis.Client
@@ -35,9 +39,14 @@ type ChatHandler struct {
 }
 
 func NewChatHandler(app *core.AppServer, db *gorm.DB, levelDB *store.LevelDB, redis *redis.Client, service *mj.Service) *ChatHandler {
-	handler := ChatHandler{db: db, leveldb: levelDB, redis: redis, mjService: service}
-	handler.App = app
-	return &handler
+	h := ChatHandler{
+		db:        db,
+		leveldb:   levelDB,
+		redis:     redis,
+		mjService: service,
+	}
+	h.App = app
+	return &h
 }
 
 var chatConfig types.ChatConfig
@@ -94,6 +103,7 @@ func (h *ChatHandler) ChatHandle(c *gin.Context) {
 	session.Model = types.ChatModel{
 		Id:       chatModel.Id,
 		Value:    chatModel.Value,
+		Weight:   chatModel.Weight,
 		Platform: types.Platform(chatModel.Platform)}
 	logger.Infof("New websocket connected, IP: %s, Username: %s", c.ClientIP(), session.Username)
 	var chatRole model.ChatRole
@@ -123,7 +133,11 @@ func (h *ChatHandler) ChatHandle(c *gin.Context) {
 				logger.Error(err)
 				client.Close()
 				h.App.ChatClients.Delete(sessionId)
-				h.App.ReqCancelFunc.Delete(sessionId)
+				cancelFunc := h.App.ReqCancelFunc.Get(sessionId)
+				if cancelFunc != nil {
+					cancelFunc()
+					h.App.ReqCancelFunc.Delete(sessionId)
+				}
 				return
 			}
 
@@ -196,17 +210,30 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 		req.Temperature = h.App.ChatConfig.ChatGML.Temperature
 		req.MaxTokens = h.App.ChatConfig.ChatGML.MaxTokens
 		break
-	default:
+	case types.Baidu:
+		req.Temperature = h.App.ChatConfig.OpenAI.Temperature
+		// TODO： 目前只支持 ERNIE-Bot-turbo 模型，如果是 ERNIE-Bot 模型则需要增加函数支持
+	case types.OpenAI:
 		req.Temperature = h.App.ChatConfig.OpenAI.Temperature
 		req.MaxTokens = h.App.ChatConfig.OpenAI.MaxTokens
-		var functions = make([]types.Function, 0)
-		for _, f := range types.InnerFunctions {
-			if !h.App.SysConfig.EnabledDraw && f.Name == types.FuncMidJourney {
-				continue
+		// OpenAI 支持函数功能
+		if h.App.SysConfig.EnabledFunction {
+			var functions = make([]types.Function, 0)
+			for _, f := range types.InnerFunctions {
+				if !h.App.SysConfig.EnabledDraw && f.Name == types.FuncMidJourney {
+					continue
+				}
+				functions = append(functions, f)
 			}
-			functions = append(functions, f)
+			req.Functions = functions
 		}
-		req.Functions = functions
+	case types.XunFei:
+		req.Temperature = h.App.ChatConfig.XunFei.Temperature
+		req.MaxTokens = h.App.ChatConfig.XunFei.MaxTokens
+	default:
+		utils.ReplyMessage(ws, "不支持的平台："+session.Model.Platform+"，请联系管理员！")
+		utils.ReplyMessage(ws, "![](/images/wx.png)")
+		return nil
 	}
 
 	// 加载聊天上下文
@@ -239,9 +266,10 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 			// loading recent chat history as chat context
 			if chatConfig.ContextDeep > 0 {
 				var historyMessages []model.HistoryMessage
-				res := h.db.Where("chat_id = ? and use_context = 1", session.ChatId).Limit(chatConfig.ContextDeep).Order("created_at desc").Find(&historyMessages)
+				res := h.db.Debug().Where("chat_id = ? and use_context = 1", session.ChatId).Limit(chatConfig.ContextDeep).Order("id desc").Find(&historyMessages)
 				if res.Error == nil {
-					for _, msg := range historyMessages {
+					for i := len(historyMessages) - 1; i >= 0; i-- {
+						msg := historyMessages[i]
 						if tokens+msg.Tokens >= types.ModelToTokens[session.Model.Value] {
 							break
 						}
@@ -274,6 +302,11 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 		return h.sendOpenAiMessage(chatCtx, req, userVo, ctx, session, role, prompt, ws)
 	case types.ChatGLM:
 		return h.sendChatGLMMessage(chatCtx, req, userVo, ctx, session, role, prompt, ws)
+	case types.Baidu:
+		return h.sendBaiduMessage(chatCtx, req, userVo, ctx, session, role, prompt, ws)
+	case types.XunFei:
+		return h.sendXunFeiMessage(chatCtx, req, userVo, ctx, session, role, prompt, ws)
+
 	}
 	utils.ReplyChunkMessage(ws, types.WsMessage{
 		Type:    types.WsMiddle,
@@ -357,12 +390,36 @@ func (h *ChatHandler) doRequest(ctx context.Context, req types.ApiRequest, platf
 		break
 	case types.ChatGLM:
 		apiURL = strings.Replace(h.App.ChatConfig.ChatGML.ApiURL, "{model}", req.Model, 1)
-		req.Prompt = req.Messages
+		req.Prompt = req.Messages // 使用 prompt 字段替代 message 字段
 		req.Messages = nil
+		break
+	case types.Baidu:
+		apiURL = strings.Replace(h.App.ChatConfig.Baidu.ApiURL, "{model}", req.Model, 1)
 		break
 	default:
 		apiURL = h.App.ChatConfig.OpenAI.ApiURL
 	}
+	if *apiKey == "" {
+		var key model.ApiKey
+		res := h.db.Where("platform = ?", platform).Order("last_used_at ASC").First(&key)
+		if res.Error != nil {
+			return nil, errors.New("no available key, please import key")
+		}
+		// 更新 API KEY 的最后使用时间
+		h.db.Model(&key).UpdateColumn("last_used_at", time.Now().Unix())
+		*apiKey = key.Value
+	}
+
+	// 百度文心，需要串接 access_token
+	if platform == types.Baidu {
+		token, err := h.getBaiduToken(*apiKey)
+		if err != nil {
+			return nil, err
+		}
+		logger.Info("百度文心 Access_Token：", token)
+		apiURL = fmt.Sprintf("%s?access_token=%s", apiURL, token)
+	}
+
 	// 创建 HttpClient 请求对象
 	var client *http.Client
 	requestBody, err := json.Marshal(req)
@@ -387,17 +444,6 @@ func (h *ChatHandler) doRequest(ctx context.Context, req types.ApiRequest, platf
 	} else {
 		client = http.DefaultClient
 	}
-	if *apiKey == "" {
-		var key model.ApiKey
-		res := h.db.Where("platform = ?", platform).Order("last_used_at ASC").First(&key)
-		if res.Error != nil {
-			return nil, errors.New("no available key, please import key")
-		}
-		// 更新 API KEY 的最后使用时间
-		h.db.Model(&key).UpdateColumn("last_used_at", time.Now().Unix())
-		*apiKey = key.Value
-	}
-
 	logger.Infof("Sending %s request, KEY: %s, PROXY: %s, Model: %s", platform, *apiKey, proxyURL, req.Model)
 	switch platform {
 	case types.Azure:
@@ -411,8 +457,22 @@ func (h *ChatHandler) doRequest(ctx context.Context, req types.ApiRequest, platf
 		logger.Info(token)
 		request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		break
-	default:
+	case types.Baidu:
+		request.RequestURI = ""
+	case types.OpenAI:
 		request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiKey))
 	}
 	return client.Do(request)
+}
+
+// 扣减用户的对话次数
+func (h *ChatHandler) subUserCalls(userVo vo.User, session *types.ChatSession) {
+	// 仅当用户没有导入自己的 API KEY 时才进行扣减
+	if userVo.ChatConfig.ApiKeys[session.Model.Platform] == "" {
+		num := 1
+		if session.Model.Weight > 0 {
+			num = session.Model.Weight
+		}
+		h.db.Model(&model.User{}).Where("id = ?", userVo.Id).UpdateColumn("calls", gorm.Expr("calls - ?", num))
+	}
 }

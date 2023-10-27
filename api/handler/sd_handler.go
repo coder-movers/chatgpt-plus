@@ -8,7 +8,6 @@ import (
 	"chatplus/store/vo"
 	"chatplus/utils"
 	"chatplus/utils/resp"
-	"encoding/base64"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -160,17 +159,29 @@ func (h *SdJobHandler) Image(c *gin.Context) {
 	resp.SUCCESS(c)
 }
 
-// JobList 获取 MJ 任务列表
+// JobList 获取 stable diffusion 任务列表
 func (h *SdJobHandler) JobList(c *gin.Context) {
 	status := h.GetInt(c, "status", 0)
-	var items []model.SdJob
-	var res *gorm.DB
-	userId, _ := c.Get(types.LoginUserID)
+	userId := h.GetInt(c, "user_id", 0)
+	page := h.GetInt(c, "page", 0)
+	pageSize := h.GetInt(c, "page_size", 0)
+
+	session := h.db.Session(&gorm.Session{})
 	if status == 1 {
-		res = h.db.Where("user_id = ? AND progress = 100", userId).Order("id DESC").Find(&items)
+		session = session.Where("progress = ?", 100).Order("id DESC")
 	} else {
-		res = h.db.Where("user_id = ? AND progress < 100", userId).Order("id ASC").Find(&items)
+		session = session.Where("progress < ?", 100).Order("id ASC")
 	}
+	if userId > 0 {
+		session = session.Where("user_id = ?", userId)
+	}
+	if page > 0 && pageSize > 0 {
+		offset := (page - 1) * pageSize
+		session = session.Offset(offset).Limit(pageSize)
+	}
+
+	var items []model.SdJob
+	res := session.Find(&items)
 	if res.Error != nil {
 		resp.ERROR(c, types.NoData)
 		return
@@ -188,12 +199,6 @@ func (h *SdJobHandler) JobList(c *gin.Context) {
 			if time.Now().Sub(item.CreatedAt) > time.Minute*30 {
 				h.db.Delete(&item)
 				continue
-			}
-			if item.ImgURL != "" { // 正在运行中任务使用代理访问图片
-				image, err := utils.DownloadImage(item.ImgURL, h.App.Config.ProxyURL)
-				if err == nil {
-					job.ImgURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(image)
-				}
 			}
 		}
 		jobs = append(jobs, job)

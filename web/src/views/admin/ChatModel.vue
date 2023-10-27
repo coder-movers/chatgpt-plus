@@ -14,6 +14,7 @@
         </el-table-column>
         <el-table-column prop="name" label="模型名称"/>
         <el-table-column prop="value" label="模型值"/>
+        <el-table-column prop="weight" label="对话权重"/>
         <el-table-column prop="enabled" label="启用状态">
           <template #default="scope">
             <el-switch v-model="scope.row['enabled']" @change="enable(scope.row)"/>
@@ -47,7 +48,7 @@
       <el-form :model="item" label-width="120px" ref="formRef" :rules="rules">
         <el-form-item label="所属平台：" prop="platform">
           <el-select v-model="item.platform" placeholder="请选择平台">
-            <el-option v-for="item in platforms" :value="item" :key="item">{{ item }}</el-option>
+            <el-option v-for="item in platforms" :value="item.value" :key="item.value">{{ item.name }}</el-option>
           </el-select>
         </el-form-item>
 
@@ -57,6 +58,27 @@
 
         <el-form-item label="模型值：" prop="value">
           <el-input v-model="item.value" autocomplete="off"/>
+        </el-form-item>
+
+        <el-form-item label="对话权重：" prop="weight">
+
+          <template #default>
+            <div class="tip-input">
+              <el-input-number :min="1" v-model="item.weight" autocomplete="off"/>
+              <div class="info">
+                <el-tooltip
+                    class="box-item"
+                    effect="dark"
+                    content="对话权重，每次对话扣减多少次对话额度"
+                    placement="right"
+                >
+                  <el-icon>
+                    <InfoFilled/>
+                  </el-icon>
+                </el-tooltip>
+              </div>
+            </div>
+          </template>
         </el-form-item>
 
         <el-form-item label="启用状态：" prop="enable">
@@ -79,7 +101,7 @@ import {onMounted, reactive, ref} from "vue";
 import {httpGet, httpPost} from "@/utils/http";
 import {ElMessage} from "element-plus";
 import {dateFormat, removeArrayItem} from "@/utils/libs";
-import {Plus} from "@element-plus/icons-vue";
+import {InfoFilled, Plus} from "@element-plus/icons-vue";
 import {Sortable} from "sortablejs";
 
 // 变量定义
@@ -94,7 +116,13 @@ const rules = reactive({
 })
 const loading = ref(true)
 const formRef = ref(null)
-const platforms = ref(["Azure", "OpenAI", "ChatGLM"])
+const platforms = ref([
+  {name: "【OpenAI】ChatGPT", value: "OpenAI"},
+  {name: "【讯飞】星火大模型", value: "XunFei"},
+  {name: "【清华智普】ChatGLM", value: "ChatGLM"},
+  {name: "【百度】文心一言", value: "Baidu"},
+  {name: "【微软】Azure", value: "Azure"},
+])
 
 // 获取数据
 httpGet('/api/admin/model/list').then((res) => {
@@ -130,9 +158,11 @@ onMounted(() => {
       sortedData.forEach((id, index) => {
         ids.push(parseInt(id))
         sorts.push(index)
+        items.value[index].sort_num = index
       })
 
-      httpPost("/api/admin/model/sort", {ids: ids, sorts: sorts}).catch(e => {
+      httpPost("/api/admin/model/sort", {ids: ids, sorts: sorts}).then(() => {
+      }).catch(e => {
         ElMessage.error("排序失败：" + e.message)
       })
     }
@@ -142,7 +172,7 @@ onMounted(() => {
 const add = function () {
   title.value = "新增模型"
   showDialog.value = true
-  item.value = {}
+  item.value = {enabled: true, weight: 1}
 }
 
 const edit = function (row) {
@@ -191,6 +221,7 @@ const remove = function (row) {
 </script>
 
 <style lang="stylus" scoped>
+@import "@/assets/css/admin-form.styl"
 .list {
 
   .opt-box {

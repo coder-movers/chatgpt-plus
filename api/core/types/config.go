@@ -79,6 +79,8 @@ type ChatConfig struct {
 	OpenAI  ModelAPIConfig `json:"open_ai"`
 	Azure   ModelAPIConfig `json:"azure"`
 	ChatGML ModelAPIConfig `json:"chat_gml"`
+	Baidu   ModelAPIConfig `json:"baidu"`
+	XunFei  ModelAPIConfig `json:"xun_fei"`
 
 	EnableContext bool `json:"enable_context"` // 是否开启聊天上下文
 	EnableHistory bool `json:"enable_history"` // 是否允许保存聊天记录
@@ -90,6 +92,8 @@ type Platform string
 const OpenAI = Platform("OpenAI")
 const Azure = Platform("Azure")
 const ChatGLM = Platform("ChatGLM")
+const Baidu = Platform("Baidu")
+const XunFei = Platform("XunFei")
 
 // UserChatConfig 用户的聊天配置
 type UserChatConfig struct {
@@ -111,7 +115,10 @@ type SystemConfig struct {
 	InitImgCalls    int      `json:"init_img_calls"`
 	VipMonthCalls   int      `json:"vip_month_calls"` // 会员每个赠送的调用次数
 	EnabledRegister bool     `json:"enabled_register"`
-	EnabledMsg      bool     `json:"enabled_msg"`  // 启用短信验证码服务
-	EnabledDraw     bool     `json:"enabled_draw"` // 启动 AI 绘画功能
-	RewardImg       string   `json:"reward_img"`   // 众筹收款二维码地址
+	EnabledMsg      bool     `json:"enabled_msg"`      // 启用短信验证码服务
+	EnabledDraw     bool     `json:"enabled_draw"`     // 启动 AI 绘画功能
+	RewardImg       string   `json:"reward_img"`       // 众筹收款二维码地址
+	EnabledFunction bool     `json:"enabled_function"` // 启用 API 函数功能
+	EnabledReward   bool     `json:"enabled_reward"`   // 启用众筹功能
+	DefaultModels   []string `json:"default_models"`   // 默认开通的 AI 模型
 }

@@ -1,4 +1,4 @@
-package handler
+package chatimpl
 
 import (
 	"bufio"
@@ -16,7 +16,8 @@ import (
 	"unicode/utf8"
 )
 
-// 将消息发送给 Azure API 并获取结果，通过 WebSocket 推送到客户端
+// 微软 Azure 模型消息发送实现
+
 func (h *ChatHandler) sendAzureMessage(
 	chatCtx []interface{},
 	req types.ApiRequest,
@@ -167,9 +168,7 @@ func (h *ChatHandler) sendAzureMessage(
 		// 消息发送成功
 		if len(contents) > 0 {
 			// 更新用户的对话次数
-			if userVo.ChatConfig.ApiKeys[session.Model.Platform] == "" {
-				h.db.Model(&model.User{}).Where("id = ?", userVo.Id).UpdateColumn("calls", gorm.Expr("calls - ?", 1))
-			}
+			h.subUserCalls(userVo, session)
 
 			if message.Role == "" {
 				message.Role = "assistant"

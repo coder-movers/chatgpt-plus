@@ -1,14 +1,15 @@
 # ChatGPT-Plus
 
 **ChatGPT-PLUS** 基于 AI 大语言模型 API 实现的 AI 助手全套开源解决方案，自带运营管理后台，开箱即用。集成了 OpenAI, Azure,
-ChatGLM,讯飞星火，文心一言等多个平台的大语言模型。主要有如下特性：
+ChatGLM,讯飞星火，文心一言等多个平台的大语言模型。集成了 MidJourney 和 Stable Diffusion AI绘画功能。主要有如下特性：
 
 * 完整的开源系统，前端应用和后台管理系统皆可开箱即用。
-* 聊天体验跟 ChatGPT 官方版本完全一致。
-* 内置了各种预训练好的角色，比如小红书写手，英语翻译大师，苏格拉底，孔子，乔布斯，周报助手等。轻松满足你的各种聊天和应用需求。
-* 支持 MidJourney AI 绘画集成，开箱即用。
+* 基于 Websocket 实现，完美的打字机体验。
+* 内置了各种预训练好的角色应用，比如小红书写手，英语翻译大师，苏格拉底，孔子，乔布斯，周报助手等。轻松满足你的各种聊天和应用需求。
+* 支持 OPenAI，Azure，文心一言，讯飞星火，清华 ChatGLM等多个大语言模型。
+* 支持 MidJourney / Stable Diffusion AI 绘画集成，开箱即用。
 * 支持使用个人微信二维码作为充值收费的支付渠道，无需企业支付通道。（可定制开发其他支付通道支持）
-* 集成插件 API 功能，可结合 GPT 开发各种强大的插件，已内置实现了微博热搜，今日头条，今日早报和 AI 绘画函数插件。
+* 集成插件 API 功能，可结合大语言模型的 function 功能开发各种强大的插件，已内置实现了微博热搜，今日头条，今日早报和 AI 绘画函数插件。
 
 ## 功能截图
 
@@ -16,41 +17,38 @@ ChatGLM,讯飞星火，文心一言等多个平台的大语言模型。主要有
 
 ![ChatGPT Chat Page](/docs/imgs/gpt.gif)
 
-### 新版聊天界面
+### AI 对话界面
 
 ![ChatGPT new Chat Page](/docs/imgs/chat-new.png)
 
-### MidJourney 专业绘画界面(v3.1.3)
+### MidJourney 专业绘画界面
+![mid-journey](/docs/imgs/mj_image.jpg)
 
-![ChatGPT-midjourney](/docs/imgs/mj_image.png)
+### Stable-Diffusion 专业绘画页面
+![Stable-Diffusion](/docs/imgs/sd_image.jpg)
+![Stable-Diffusion](/docs/imgs/sd_image_detail.jpg)
+### 绘图作品展
+![ChatGPT image_list](/docs/imgs/image-list.png)
+### AI应用列表
+![ChatGPT-app-list](/docs/imgs/app-list.jpg)
 
 ### 自动调用函数插件
-
 ![ChatGPT function plugin](/docs/imgs/plugin.png)
-
 ![ChatGPT function plugin](/docs/imgs/mj.jpg)
-
-### 用户设置
-
-![ChatGPT user profle](/docs/imgs/user_profile.png)
-
-### 登录页面
-
-![ChatGPT Login](/docs/imgs/login.png)
 
 ### 管理后台
 
 ![ChatGPT admin](/docs/imgs/admin_dashboard.png)
-
-![ChatGPT admin](/docs/imgs/admin_config.png)
-
+![ChatGPT admin](/docs/imgs/admin_config.jpg)
+![ChatGPT admin](/docs/imgs/admin_models.jpg)
 ![ChatGPT admin](/docs/imgs/admin_user.png)
 
 ### 移动端 Web 页面
 
 ![Mobile chat list](/docs/imgs/mobile_chat_list.png)
 ![Mobile chat session](/docs/imgs/mobile_chat_session.png)
-![Mobile chat setting](/docs/imgs/mobile_chat_setting.png)
+![Mobile chat setting](/docs/imgs/mobile_user_profile.png)
+![Mobile chat setting](/docs/imgs/mobile_pay.png)
 
 ### 7. 体验地址
 
@@ -101,21 +99,22 @@ ChatGPT 的服务。
 * Github 地址：https://github.com/yangjian102621/chatgpt-plus
 * 码云地址：https://gitee.com/blackfox/chatgpt-plus
 
-
 ## 客户端下载
 
 目前已经支持 Win/Linux/Mac/Android 客户端，下载地址为：https://github.com/yangjian102621/chatgpt-plus/releases/tag/v3.1.2
-
 
 ## TODOLIST
 
 * [x] 整合 Midjourney AI 绘画 API
 * [x] 开发移动端聊天页面
-* [x] 接入微信支付功能
+* [x] 接入微信收款功能
 * [x] 支持 ChatGPT 函数功能，通过函数实现插件
+* [x] 开发桌面版应用
+* [x] 开发手机 App 客户端
+* [x] 支付宝支付功能
 * [ ] 支持基于知识库的 AI 问答
-* [ ] 开发桌面版应用
-* [ ] 开发手机 App 客户端
+* [ ] 会员推广功能
+* [ ] 微信支付功能
 
 ## Docker 快速部署
 
@@ -134,7 +133,7 @@ cd docker/mysql
 # 创建 mysql 容器
 docker-compose up -d
 # 导入数据库
-docker exec -i chatgpt-plus-mysql sh -c 'exec mysql -uroot -p12345678' < ../../database/chatgpt_plus-v3.1.4.sql
+docker exec -i chatgpt-plus-mysql sh -c 'exec mysql -uroot -p12345678' < ../../database/chatgpt_plus-v3.1.7.sql
 ```
 
 如果你本地已经安装了 MySQL 服务，那么你只需手动导入数据库即可。
@@ -222,8 +221,11 @@ WeChatBot = false # 是否启动微信机器人
 ```
 
 > 1. 如果你不知道如何获取 Discord 用户 Token 和 Bot Token
-请查参考 [Midjourney｜如何集成到自己的平台](https://zhuanlan.zhihu.com/p/631079476)。
-> 2. `Txt2ImgJsonPath` 的默认用的是使用最广泛的 [stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) 项目的 API，如果你用的是其他版本，比如秋叶的懒人包部署的，那么请将对应的 text2img 的参数报文复制放在 `res/text2img.json` 文件中即可。
+     请查参考 [Midjourney｜如何集成到自己的平台](https://zhuanlan.zhihu.com/p/631079476)。
+> 2. `Txt2ImgJsonPath`
+     的默认用的是使用最广泛的 [stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) 项目的
+     API，如果你用的是其他版本，比如秋叶的懒人包部署的，那么请将对应的 text2img 的参数报文复制放在 `res/text2img.json`
+     文件中即可。
 
 修改 nginx 配置文档 `docker/conf/nginx/conf.d/chatgpt-plus.conf`，把后端转发的地址改成当前主机的内网 IP 地址。
 
@@ -250,6 +252,42 @@ location /static/ {
 
 ### 3. 启动应用
 
+先修改 `docker/docker-compose.yaml` 文件中的镜像地址，改成最新的版本：
+
+```yaml
+version: '3'
+services:
+  # 后端 API 镜像
+  chatgpt-plus-api:
+    image: registry.cn-shenzhen.aliyuncs.com/geekmaster/chatgpt-plus-api:v3.1.5 #这里改成最新的 release 版本地址
+    container_name: chatgpt-plus-api
+    restart: always
+    environment:
+      - DEBUG=false
+      - LOG_LEVEL=info
+      - CONFIG_FILE=config.toml
+    ports:
+      - "5678:5678"
+    volumes:
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime
+      - ./conf/config.toml:/var/www/app/config.toml
+      - ./logs:/var/www/app/logs
+      - ./static:/var/www/app/static
+
+  # 前端应用镜像
+  chatgpt-plus-web:
+    image: registry.cn-shenzhen.aliyuncs.com/geekmaster/chatgpt-plus-web:v3.1.5 #这里改成最新的 release 版本地址
+    container_name: chatgpt-plus-web
+    restart: always
+    ports:
+      - "8080:8080" # 这边是对外的端口，支持 8080，80和443
+    volumes:
+      - ./logs/nginx:/var/log/nginx
+      - ./conf/nginx/conf.d:/etc/nginx/conf.d
+      - ./conf/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+```
+
 ```shell
 cd docker
 docker-compose up -d
@@ -265,8 +303,8 @@ docker-compose up -d
 
 ![add API Key](docs/imgs/apikey_add.png)
 
-最后登录前端聊天页面 [http://localhost:8080/chat](http://localhost:8080/chat)
-你可以注册新用户，也可以使用系统默认有个账号：`geekmaster/12345678` 登录聊天。
+最后进入前端聊天页面 [http://localhost:8080/chat](http://localhost:8080/chat)
+你可以注册新用户，也可以使用系统默认有个账号：`18575670125/12345678` 登录聊天。
 
 祝你使用愉快！！！
 
@@ -367,6 +405,10 @@ make clean linux
 
 如果你觉得这个项目对你有帮助，并且情况允许的话，可以请作者喝杯咖啡，非常感谢你的支持～
 
+![支付宝打赏](docs/imgs/alipay.png)
 ![微信打赏](docs/imgs/wechat-pay.png)
+
+![Star History Chart](https://api.star-history.com/svg?repos=yangjian102621/chatgpt-plus&type=Date)
+
 
 

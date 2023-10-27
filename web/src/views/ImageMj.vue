@@ -1,6 +1,6 @@
 <template>
   <div class="page-mj">
-    <div class="inner">
+    <div class="inner custom-scroll">
       <div class="mj-box">
         <h2>MidJourney 创作中心</h2>
 
@@ -226,66 +226,48 @@
             <ItemList :items="runningJobs" v-if="runningJobs.length > 0">
               <template #default="scope">
                 <div class="job-item">
-                  <el-popover
-                      placement="top-start"
-                      :title="getTaskType(scope.item.type)"
-                      :width="240"
-                      trigger="hover"
-                  >
-                    <template #reference>
-                      <div v-if="scope.item.progress > 0" class="job-item-inner">
-                        <el-image :src="scope.item['img_url']"
-                                  :zoom-rate="1.2"
-                                  :preview-src-list="[scope.item['img_url']]"
-                                  fit="cover"
-                                  :initial-index="0" loading="lazy">
-                          <template #placeholder>
-                            <div class="image-slot">
-                              正在加载图片
-                            </div>
-                          </template>
-
-                          <template #error>
-                            <div class="image-slot">
-                              <el-icon>
-                                <Picture/>
-                              </el-icon>
-                            </div>
-                          </template>
-                        </el-image>
-
-                        <div class="progress">
-                          <el-progress type="circle" :percentage="scope.item.progress" :width="100" color="#47fff1"/>
+                  <div v-if="scope.item.progress > 0" class="job-item-inner">
+                    <el-image :src="scope.item['img_url']"
+                              :zoom-rate="1.2"
+                              :preview-src-list="[scope.item['img_url']]"
+                              fit="cover"
+                              :initial-index="0" loading="lazy">
+                      <template #placeholder>
+                        <div class="image-slot">
+                          正在加载图片
                         </div>
-                      </div>
-                      <el-image fit="cover" v-else>
-                        <template #error>
-                          <div class="image-slot">
-                            <i class="iconfont icon-quick-start"></i>
-                            <span>任务正在排队中</span>
-                          </div>
-                        </template>
-                      </el-image>
-                    </template>
+                      </template>
 
-                    <template #default>
-                      <div class="mj-list-item-prompt">
-                        <span>{{ scope.item.prompt }}</span>
-                        <el-icon class="copy-prompt" :data-clipboard-text="scope.item.prompt">
-                          <DocumentCopy/>
-                        </el-icon>
+                      <template #error>
+                        <div class="image-slot">
+                          <el-icon>
+                            <Picture/>
+                          </el-icon>
+                        </div>
+                      </template>
+                    </el-image>
+
+                    <div class="progress">
+                      <el-progress type="circle" :percentage="scope.item.progress" :width="100" color="#47fff1"/>
+                    </div>
+                  </div>
+                  <el-image fit="cover" v-else>
+                    <template #error>
+                      <div class="image-slot">
+                        <i class="iconfont icon-quick-start"></i>
+                        <span>任务正在排队中</span>
                       </div>
                     </template>
-                  </el-popover>
-
+                  </el-image>
                 </div>
               </template>
             </ItemList>
             <el-empty :image-size="100" v-else/>
           </div>
+
           <h2>创作记录</h2>
           <div class="finish-job-list">
-            <ItemList :items="finishedJobs" v-if="finishedJobs.length > 0">
+            <ItemList :items="finishedJobs" v-if="finishedJobs.length > 0" width="240" :gap="16">
               <template #default="scope">
                 <div class="job-item">
                   <el-image
@@ -356,6 +338,8 @@
                 </div>
               </template>
             </ItemList>
+
+            <el-empty :image-size="100" v-else/>
           </div> <!-- end finish job list-->
         </div>
 
@@ -379,7 +363,6 @@ import {getSessionId, getUserToken} from "@/store/session";
 
 const listBoxHeight = ref(window.innerHeight - 40)
 const mjBoxHeight = ref(window.innerHeight - 150)
-
 window.onresize = () => {
   listBoxHeight.value = window.innerHeight - 40
   mjBoxHeight.value = window.innerHeight - 150
@@ -476,14 +459,14 @@ onMounted(() => {
   checkSession().then(user => {
     imgCalls.value = user['img_calls']
     // 获取运行中的任务
-    httpGet("/api/mj/jobs?status=0").then(res => {
+    httpGet(`/api/mj/jobs?status=0&user_id=${user['id']}`).then(res => {
       runningJobs.value = res.data
     }).catch(e => {
       ElMessage.error("获取任务失败：" + e.message)
     })
 
     // 获取运行中的任务
-    httpGet("/api/mj/jobs?status=1").then(res => {
+    httpGet(`/api/mj/jobs?status=1&user_id=${user['id']}`).then(res => {
       finishedJobs.value = res.data
       previewImgList.value = []
       for (let index in finishedJobs.value) {
@@ -501,7 +484,7 @@ onMounted(() => {
 
   const clipboard = new Clipboard('.copy-prompt');
   clipboard.on('success', () => {
-    ElMessage.success({message: "复制成功！", duration: 500});
+    ElMessage.success("复制成功！");
   })
 
   clipboard.on('error', () => {
@@ -601,4 +584,5 @@ const send = (url, index, item) => {
 
 <style lang="stylus">
 @import "@/assets/css/image-mj.styl"
+@import "@/assets/css/custom-scroll.styl"
 </style>
