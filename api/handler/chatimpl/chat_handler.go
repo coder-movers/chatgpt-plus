@@ -27,6 +27,7 @@ import (
 )
 
 const ErrorMsg = "抱歉，AI 助手开小差了，请稍后再试。"
+const ErrImg = "![](/images/wx.png)"
 
 var logger = logger2.GetLogger()
 
@@ -182,19 +183,25 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 
 	if userVo.Status == false {
 		utils.ReplyMessage(ws, "您的账号已经被禁用，如果疑问，请联系管理员！")
-		utils.ReplyMessage(ws, "![](/images/wx.png)")
+		utils.ReplyMessage(ws, ErrImg)
+		return nil
+	}
+
+	if userVo.Calls < session.Model.Weight {
+		utils.ReplyMessage(ws, fmt.Sprintf("您当前剩余对话次数（%d）已不足以支付当前模型的单次对话需要消耗的对话额度（%d）！", userVo.Calls, session.Model.Weight))
+		utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
 
 	if userVo.Calls <= 0 && userVo.ChatConfig.ApiKeys[session.Model.Platform] == "" {
-		utils.ReplyMessage(ws, "您的对话次数已经用尽，请联系管理员或者点击左下角菜单加入众筹获得100次对话！")
-		utils.ReplyMessage(ws, "![](/images/wx.png)")
+		utils.ReplyMessage(ws, "您的对话次数已经用尽，请联系管理员或者充值点卡继续对话！")
+		utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
 
 	if userVo.ExpiredTime > 0 && userVo.ExpiredTime <= time.Now().Unix() {
 		utils.ReplyMessage(ws, "您的账号已经过期，请联系管理员！")
-		utils.ReplyMessage(ws, "![](/images/wx.png)")
+		utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
 	var req = types.ApiRequest{
@@ -232,7 +239,7 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 		req.MaxTokens = h.App.ChatConfig.XunFei.MaxTokens
 	default:
 		utils.ReplyMessage(ws, "不支持的平台："+session.Model.Platform+"，请联系管理员！")
-		utils.ReplyMessage(ws, "![](/images/wx.png)")
+		utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
 
@@ -251,15 +258,17 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 
 			// loading the role context
 			var messages []types.Message
-			err := utils.JsonDecode(role.Context, &messages)
-			if err == nil {
-				for _, v := range messages {
-					tks, _ := utils.CalcTokens(v.Content, req.Model)
-					if tokens+tks >= types.ModelToTokens[req.Model] {
-						break
+			if len(messages) > 0 {
+				err := utils.JsonDecode(role.Context, &messages)
+				if err == nil {
+					for _, v := range messages {
+						tks, _ := utils.CalcTokens(v.Content, req.Model)
+						if tokens+tks >= types.ModelToTokens[req.Model] {
+							break
+						}
+						tokens += tks
+						chatCtx = append(chatCtx, v)
 					}
-					tokens += tks
-					chatCtx = append(chatCtx, v)
 				}
 			}
 
@@ -475,4 +484,11 @@ func (h *ChatHandler) subUserCalls(userVo vo.User, session *types.ChatSession) {
 		}
 		h.db.Model(&model.User{}).Where("id = ?", userVo.Id).UpdateColumn("calls", gorm.Expr("calls - ?", num))
 	}
+}
+
+func (h *ChatHandler) incUserTokenFee(userId uint, tokens int) {
+	h.db.Model(&model.User{}).Where("id = ?", userId).
+		UpdateColumn("total_tokens", gorm.Expr("total_tokens + ?", tokens))
+	h.db.Model(&model.User{}).Where("id = ?", userId).
+		UpdateColumn("tokens", gorm.Expr("tokens + ?", tokens))
 }
