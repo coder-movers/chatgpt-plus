@@ -54,7 +54,7 @@
                   <el-col :span="12">
                     <el-input placeholder="手机验证码"
                               size="large" maxlength="30"
-                              v-model.number="formData.code"
+                              v-model="formData.code"
                               autocomplete="off">
                       <template #prefix>
                         <el-icon>
@@ -67,6 +67,19 @@
                     <send-msg size="large" :mobile="formData.mobile"/>
                   </el-col>
                 </el-row>
+              </div>
+
+              <div class="block">
+                <el-input placeholder="邀请码"
+                          size="large"
+                          v-model="formData.invite_code"
+                          autocomplete="off">
+                  <template #prefix>
+                    <el-icon>
+                      <Message/>
+                    </el-icon>
+                  </template>
+                </el-input>
               </div>
 
               <el-row class="btn-row">
@@ -85,6 +98,9 @@
           <el-result icon="error" title="注册功能已关闭">
             <template #sub-title>
               <p>抱歉，系统已关闭注册功能，请联系管理员添加账号！</p>
+              <div class="wechat-card">
+                <el-image :src="wxImg"/>
+              </div>
             </template>
           </el-result>
         </div>
@@ -100,9 +116,9 @@
 <script setup>
 
 import {ref} from "vue";
-import {Checked, Iphone, Lock} from "@element-plus/icons-vue";
+import {Checked, Iphone, Lock, Message} from "@element-plus/icons-vue";
 import {httpGet, httpPost} from "@/utils/http";
-import {ElMessage} from "element-plus";
+import {ElMessage, ElNotification} from "element-plus";
 import {useRouter} from "vue-router";
 import FooterBar from "@/components/FooterBar.vue";
 import SendMsg from "@/components/SendMsg.vue";
@@ -118,17 +134,35 @@ const formData = ref({
   password: '',
   code: '',
   repass: '',
+  invite_code: router.currentRoute.value.query['invite_code'],
 })
 const formRef = ref(null)
 const enableMsg = ref(false)
 const enableRegister = ref(true)
+const wxImg = ref("/images/wx.png")
 
-httpGet('/api/sms/status').then(res => {
+httpGet("/api/admin/config/get?key=system").then(res => {
   if (res.data) {
-    enableMsg.value = res.data['enabled_msg_service']
+    enableMsg.value = res.data['enabled_msg']
     enableRegister.value = res.data['enabled_register']
+    if (res.data['force_invite'] && !formData.value.invite_code) {
+      ElNotification({
+        title: '提示：',
+        dangerouslyUseHTMLString: true,
+        message: '当前系统开启了强制邀请注册功能，必须有邀请码才能注册哦。扫描下面二维码获取邀请码。<br/> <img alt="qrcode" src="/images/wx.png" />',
+        type: 'info',
+        duration: 0,
+      })
+    }
   }
+}).catch(e => {
+  ElMessage.error("获取系统配置失败：" + e.message)
 })
+
+httpGet("/api/invite/hits", {code: formData.value.invite_code}).then(() => {
+}).catch(() => {
+})
+
 
 const register = function () {
   if (!validateMobile(formData.value.mobile)) {
@@ -144,7 +178,6 @@ const register = function () {
   if (enableMsg.value && formData.value.code === '') {
     return ElMessage.error('请输入短信验证码');
   }
-  formData.value.code = parseInt(formData.value.code)
   httpPost('/api/user/register', formData.value).then((res) => {
     setUserToken(res.data)
     ElMessage.success({
@@ -249,6 +282,10 @@ const register = function () {
 
     .tip-result {
       z-index 10
+
+      .wechat-card {
+        padding 20px
+      }
     }
 
     .footer {

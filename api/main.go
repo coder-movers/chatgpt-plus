@@ -94,7 +94,6 @@ func main() {
 		// 初始化数据库
 		fx.Provide(store.NewGormConfig),
 		fx.Provide(store.NewMysql),
-		fx.Provide(store.NewLevelDB),
 		fx.Provide(store.NewRedisClient),
 
 		fx.Provide(func() embed.FS {
@@ -217,8 +216,9 @@ func main() {
 			group.GET("session", h.Session)
 			group.GET("profile", h.Profile)
 			group.POST("profile/update", h.ProfileUpdate)
-			group.POST("password", h.Password)
+			group.POST("password", h.UpdatePass)
 			group.POST("bind/mobile", h.BindMobile)
+			group.POST("resetPass", h.ResetPass)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *chatimpl.ChatHandler) {
 			group := s.Engine.Group("/api/chat/")
@@ -237,7 +237,6 @@ func main() {
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.SmsHandler) {
 			group := s.Engine.Group("/api/sms/")
-			group.GET("status", h.Status)
 			group.POST("code", h.SendCode)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.CaptchaHandler) {
@@ -275,7 +274,6 @@ func main() {
 			group.POST("login", h.Login)
 			group.GET("logout", h.Logout)
 			group.GET("session", h.Session)
-			group.GET("migrate", h.Migrate)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *admin.ApiKeyHandler) {
 			group := s.Engine.Group("/api/admin/apikey/")
@@ -314,7 +312,7 @@ func main() {
 			group := s.Engine.Group("/api/admin/model/")
 			group.POST("save", h.Save)
 			group.GET("list", h.List)
-			group.POST("enable", h.Enable)
+			group.POST("set", h.Set)
 			group.POST("sort", h.Sort)
 			group.GET("remove", h.Remove)
 		}),
@@ -345,6 +343,14 @@ func main() {
 		fx.Invoke(func(s *core.AppServer, h *handler.ProductHandler) {
 			group := s.Engine.Group("/api/product/")
 			group.GET("list", h.List)
+		}),
+
+		fx.Provide(handler.NewInviteHandler),
+		fx.Invoke(func(s *core.AppServer, h *handler.InviteHandler) {
+			group := s.Engine.Group("/api/invite/")
+			group.GET("code", h.Code)
+			group.POST("list", h.List)
+			group.GET("hits", h.Hits)
 		}),
 
 		fx.Invoke(func(s *core.AppServer, db *gorm.DB) {

@@ -3,7 +3,6 @@ package handler
 import (
 	"chatplus/core"
 	"chatplus/core/types"
-	"chatplus/store"
 	"chatplus/store/model"
 	"chatplus/store/vo"
 	"chatplus/utils"
@@ -23,7 +22,6 @@ type UserHandler struct {
 	BaseHandler
 	db       *gorm.DB
 	searcher *xdb.Searcher
-	leveldb  *store.LevelDB
 	redis    *redis.Client
 }
 
@@ -31,9 +29,8 @@ func NewUserHandler(
 	app *core.AppServer,
 	db *gorm.DB,
 	searcher *xdb.Searcher,
-	levelDB *store.LevelDB,
 	client *redis.Client) *UserHandler {
-	handler := &UserHandler{db: db, searcher: searcher, leveldb: levelDB, redis: client}
+	handler := &UserHandler{db: db, searcher: searcher, redis: client}
 	handler.App = app
 	return handler
 }
@@ -42,9 +39,10 @@ func NewUserHandler(
 func (h *UserHandler) Register(c *gin.Context) {
 	// parameters process
 	var data struct {
-		Mobile   string `json:"mobile"`
-		Password string `json:"password"`
-		Code     int    `json:"code"`
+		Mobile     string `json:"mobile"`
+		Password   string `json:"password"`
+		Code       string `json:"code"`
+		InviteCode string `json:"invite_code"`
 	}
 	if err := c.ShouldBindJSON(&data); err != nil {
 		resp.ERROR(c, types.InvalidArgs)
@@ -64,10 +62,24 @@ func (h *UserHandler) Register(c *gin.Context) {
 	// 检查验证码
 	key := CodeStorePrefix + data.Mobile
 	if h.App.SysConfig.EnabledMsg {
-		var code int
-		err := h.leveldb.Get(key, &code)
+		code, err := h.redis.Get(c, key).Result()
 		if err != nil || code != data.Code {
 			resp.ERROR(c, "短信验证码错误")
+			return
+		}
+	}
+
+	// 验证邀请码
+	inviteCode := model.InviteCode{}
+	if data.InviteCode == "" {
+		if h.App.SysConfig.ForceInvite {
+			resp.ERROR(c, "当前系统设定必须使用邀请码才能注册")
+			return
+		}
+	} else {
+		res := h.db.Where("code = ?", data.InviteCode).First(&inviteCode)
+		if res.Error != nil {
+			resp.ERROR(c, "无效的邀请码")
 			return
 		}
 	}
@@ -96,7 +108,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 				types.ChatGLM: "",
 			},
 		}),
-		Calls:    h.App.SysConfig.UserInitCalls,
+		Calls:    h.App.SysConfig.InitChatCalls,
 		ImgCalls: h.App.SysConfig.InitImgCalls,
 	}
 	res = h.db.Create(&user)
@@ -106,8 +118,28 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// 记录邀请关系
+	if data.InviteCode != "" {
+		// 增加邀请数量
+		h.db.Model(&model.InviteCode{}).Where("code = ?", data.InviteCode).UpdateColumn("reg_num", gorm.Expr("reg_num + ?", 1))
+		if h.App.SysConfig.InviteChatCalls > 0 {
+			h.db.Model(&model.User{}).Where("id = ?", inviteCode.UserId).UpdateColumn("calls", gorm.Expr("calls + ?", h.App.SysConfig.InviteChatCalls))
+		}
+		if h.App.SysConfig.InviteImgCalls > 0 {
+			h.db.Model(&model.User{}).Where("id = ?", inviteCode.UserId).UpdateColumn("img_calls", gorm.Expr("img_calls + ?", h.App.SysConfig.InviteImgCalls))
+		}
+
+		// 添加邀请记录
+		h.db.Create(&model.InviteLog{
+			InviterId:  inviteCode.UserId,
+			UserId:     user.Id,
+			Username:   user.Mobile,
+			InviteCode: inviteCode.Code,
+			Reward:     utils.JsonEncode(types.InviteReward{ChatCalls: h.App.SysConfig.InviteChatCalls, ImgCalls: h.App.SysConfig.InviteImgCalls}),
+		})
+	}
 	if h.App.SysConfig.EnabledMsg {
-		_ = h.leveldb.Delete(key) // 注册成功，删除短信验证码
+		_ = h.redis.Del(c, key) // 注册成功，删除短信验证码
 	}
 
 	// 自动登录创建 token
@@ -279,8 +311,8 @@ func (h *UserHandler) ProfileUpdate(c *gin.Context) {
 	resp.SUCCESS(c)
 }
 
-// Password 更新密码
-func (h *UserHandler) Password(c *gin.Context) {
+// UpdatePass 更新密码
+func (h *UserHandler) UpdatePass(c *gin.Context) {
 	var data struct {
 		OldPass  string `json:"old_pass"`
 		Password string `json:"password"`
@@ -319,14 +351,62 @@ func (h *UserHandler) Password(c *gin.Context) {
 	resp.SUCCESS(c)
 }
 
+// ResetPass 重置密码
+func (h *UserHandler) ResetPass(c *gin.Context) {
+	var data struct {
+		Mobile   string
+		Code     string // 验证码
+		Password string // 新密码
+	}
+	if err := c.ShouldBindJSON(&data); err != nil {
+		resp.ERROR(c, types.InvalidArgs)
+		return
+	}
+
+	var user model.User
+	res := h.db.Where("mobile", data.Mobile).First(&user)
+	if res.Error != nil {
+		resp.ERROR(c, "用户不存在！")
+		return
+	}
+
+	// 检查验证码
+	key := CodeStorePrefix + data.Mobile
+	if h.App.SysConfig.EnabledMsg {
+		code, err := h.redis.Get(c, key).Result()
+		if err != nil || code != data.Code {
+			resp.ERROR(c, "短信验证码错误")
+			return
+		}
+	}
+
+	password := utils.GenPassword(data.Password, user.Salt)
+	user.Password = password
+	res = h.db.Updates(&user)
+	if res.Error != nil {
+		resp.ERROR(c)
+	} else {
+		h.redis.Del(c, key)
+		resp.SUCCESS(c)
+	}
+}
+
 // BindMobile 绑定手机号
 func (h *UserHandler) BindMobile(c *gin.Context) {
 	var data struct {
 		Mobile string `json:"mobile"`
-		Code   int    `json:"code"`
+		Code   string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&data); err != nil {
 		resp.ERROR(c, types.InvalidArgs)
+		return
+	}
+
+	// 检查验证码
+	key := CodeStorePrefix + data.Mobile
+	code, err := h.redis.Get(c, key).Result()
+	if err != nil || code != data.Code {
+		resp.ERROR(c, "短信验证码错误")
 		return
 	}
 
@@ -335,15 +415,6 @@ func (h *UserHandler) BindMobile(c *gin.Context) {
 	res := h.db.Where("mobile = ?", data.Mobile).First(&item)
 	if res.Error == nil {
 		resp.ERROR(c, "该手机号已经被其他账号绑定")
-		return
-	}
-
-	// 检查验证码
-	key := CodeStorePrefix + data.Mobile
-	var code int
-	err := h.leveldb.Get(key, &code)
-	if err != nil || code != data.Code {
-		resp.ERROR(c, "短信验证码错误")
 		return
 	}
 
@@ -359,6 +430,6 @@ func (h *UserHandler) BindMobile(c *gin.Context) {
 		return
 	}
 
-	_ = h.leveldb.Delete(key) // 删除短信验证码
+	_ = h.redis.Del(c, key) // 删除短信验证码
 	resp.SUCCESS(c)
 }

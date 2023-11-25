@@ -10,16 +10,35 @@
           <el-input v-model="system['admin_title']"/>
         </el-form-item>
         <el-form-item label="注册赠送对话次数" prop="user_init_calls">
-          <el-input v-model.number="system['user_init_calls']" placeholder="新用户注册赠送对话次数"/>
-        </el-form-item>
-        <el-form-item label="VIP每月对话次数" prop="vip_month_calls">
-          <el-input v-model.number="system['vip_month_calls']" placeholder="VIP用户每月赠送对话次数"/>
+          <el-input v-model.number="system['init_chat_calls']" placeholder="新用户注册赠送对话次数"/>
         </el-form-item>
         <el-form-item label="注册赠送绘图次数" prop="init_img_calls">
           <el-input v-model.number="system['init_img_calls']" placeholder="新用户注册赠送绘图次数"/>
         </el-form-item>
+        <el-form-item label="邀请赠送对话次数" prop="invite_chat_calls">
+          <el-input v-model.number="system['invite_chat_calls']" placeholder="邀请新用户注册赠送对话次数"/>
+        </el-form-item>
+        <el-form-item label="邀请赠送绘图次数" prop="invite_img_calls">
+          <el-input v-model.number="system['invite_img_calls']" placeholder="邀请新用户注册赠送绘图次数"/>
+        </el-form-item>
+        <el-form-item label="VIP每月对话次数" prop="vip_month_calls">
+          <el-input v-model.number="system['vip_month_calls']" placeholder="VIP用户每月赠送对话次数"/>
+        </el-form-item>
         <el-form-item label="开放注册服务" prop="enabled_register">
           <el-switch v-model="system['enabled_register']"/>
+        </el-form-item>
+        <el-form-item label="强制邀请码注册" prop="force_invite">
+          <el-switch v-model="system['force_invite']"/>
+          <el-tooltip
+              effect="dark"
+              content="开启之后，用户必须使用邀请码才能注册"
+              raw-content
+              placement="right"
+          >
+            <el-icon>
+              <InfoFilled/>
+            </el-icon>
+          </el-tooltip>
         </el-form-item>
         <el-form-item label="短信服务" prop="enabled_msg">
           <el-switch v-model="system['enabled_msg']"/>
@@ -120,6 +139,15 @@
             </div>
           </div>
         </el-form-item>
+        <el-form-item label="会员充值说明" prop="order_pay_info_text">
+          <el-input
+              v-model="system['order_pay_info_text']"
+              :autosize="{ minRows: 3, maxRows: 10 }"
+              type="textarea"
+              placeholder="请输入会员充值说明文字，比如介绍会员计划"
+          />
+        </el-form-item>
+
         <el-form-item label="默认AI模型" prop="default_models">
           <template #default>
             <div class="tip-input">
@@ -310,7 +338,7 @@ onMounted(() => {
 const rules = reactive({
   title: [{required: true, message: '请输入网站标题', trigger: 'blur',}],
   admin_title: [{required: true, message: '请输入控制台标题', trigger: 'blur',}],
-  user_init_calls: [{required: true, message: '请输入赠送对话次数', trigger: 'blur'}],
+  init_chat_calls: [{required: true, message: '请输入赠送对话次数', trigger: 'blur'}],
   user_img_calls: [{required: true, message: '请输入赠送绘图次数', trigger: 'blur'}],
 })
 const save = function (key) {
