@@ -12,9 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/nfnt/resize"
 	"gorm.io/gorm"
+	"image"
+	"image/jpeg"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -58,6 +63,7 @@ func (s *AppServer) Init(debug bool, client *redis.Client) {
 		logger.Info("Enabled debug mode")
 	}
 	s.Engine.Use(corsMiddleware())
+	s.Engine.Use(staticResourceMiddleware())
 	s.Engine.Use(authorizeMiddleware(s, client))
 	s.Engine.Use(parameterHandlerMiddleware())
 	s.Engine.Use(errorHandler)
@@ -148,6 +154,7 @@ func authorizeMiddleware(s *AppServer, client *redis.Client) gin.HandlerFunc {
 			c.Request.URL.Path == "/api/chat/detail" ||
 			c.Request.URL.Path == "/api/role/list" ||
 			c.Request.URL.Path == "/api/mj/jobs" ||
+			c.Request.URL.Path == "/api/invite/hits" ||
 			c.Request.URL.Path == "/api/sd/jobs" ||
 			strings.HasPrefix(c.Request.URL.Path, "/api/sms/") ||
 			strings.HasPrefix(c.Request.URL.Path, "/api/captcha/") ||
@@ -222,10 +229,16 @@ func parameterHandlerMiddleware() gin.HandlerFunc {
 				params[key][i] = strings.TrimSpace(value)
 			}
 		}
-		// 更新参数
+		// update get parameters
 		c.Request.URL.RawQuery = params.Encode()
+		// skip file upload requests
+		contentType := c.Request.Header.Get("Content-Type")
+		if strings.Contains(contentType, "multipart/form-data") {
+			c.Next()
+			return
+		}
 
-		// POST JSON 参数处理
+		// process POST JSON request body
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			c.Next()
@@ -271,5 +284,60 @@ func trimJSONStrings(data interface{}) {
 				trimJSONStrings(value)
 			}
 		}
+	}
+}
+
+// 静态资源中间件
+func staticResourceMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		url := c.Request.URL.String()
+		// 拦截生成缩略图请求
+		if strings.HasPrefix(url, "/static/") && strings.Contains(url, "?imageView2") {
+			r := strings.SplitAfter(url, "imageView2")
+			size := strings.Split(r[1], "/")
+			if len(size) != 8 {
+				c.String(http.StatusNotFound, "invalid thumb args")
+				return
+			}
+			with := utils.IntValue(size[3], 0)
+			height := utils.IntValue(size[5], 0)
+			quality := utils.IntValue(size[7], 75)
+
+			// 打开图片文件
+			filePath := strings.TrimLeft(c.Request.URL.Path, "/")
+			file, err := os.Open(filePath)
+			if err != nil {
+				c.String(http.StatusNotFound, "Image not found")
+				return
+			}
+			defer file.Close()
+
+			// 解码图片
+			img, _, err := image.Decode(file)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error decoding image")
+				return
+			}
+
+			var newImg image.Image
+			if height == 0 || with == 0 {
+				// 固定宽度，高度自适应
+				newImg = resize.Resize(uint(with), uint(height), img, resize.Lanczos3)
+			} else {
+				// 生成缩略图
+				newImg = resize.Thumbnail(uint(with), uint(height), img, resize.Lanczos3)
+			}
+			var buffer bytes.Buffer
+			err = jpeg.Encode(&buffer, newImg, &jpeg.Options{Quality: quality})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// 直接输出图像数据流
+			c.Data(http.StatusOK, "image/jpeg", buffer.Bytes())
+			return
+		}
+		c.Next()
 	}
 }

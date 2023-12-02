@@ -72,11 +72,19 @@ func (s *Service) Run() {
 		}
 		if err != nil {
 			logger.Error("绘画任务执行失败：", err)
-			if task.RetryCount <= 5 {
-				s.taskQueue.RPush(task)
+			// 删除任务
+			s.db.Delete(&model.MidJourneyJob{Id: uint(task.Id)})
+			// 推送任务到前端
+			client := s.Clients.Get(task.SessionId)
+			if client != nil {
+				utils.ReplyChunkMessage(client, vo.MidJourneyJob{
+					Type:      task.Type.String(),
+					UserId:    task.UserId,
+					MessageId: task.MessageId,
+					Progress:  -1,
+					Prompt:    task.Prompt,
+				})
 			}
-			task.RetryCount += 1
-			time.Sleep(time.Second * 3)
 			continue
 		}
 
